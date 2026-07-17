@@ -1,0 +1,25 @@
+# 构建产物与本地环境（不提交）
+build-web/
+tools/
+node_modules/
+web/test/node_modules/
+
+# 上游 vcpkg 检出（仅桌面端需要，Web 构建不用；如需桌面构建请重新获取）
+ymir/vcpkg/
+
+# e2e 测试临时文件
+web/test/zero-ipl.bin
+
+# 任何可能误放的 ROM/BIOS/存档文件（版权与隐私）
+*.chd
+*.cue
+*.iso
+*.mds
+*.mdf
+*.ccd
+*.img
+*.sub
+*.rom
+*.srm
+*.bup
+*.savestate
