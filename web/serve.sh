@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 DIST=build-web/dist
 mkdir -p "$DIST"
 cp -f build-web/ymir-web.js build-web/ymir-web.wasm "$DIST"/
-cp -f web/shell/index.html web/shell/main.js web/shell/ymir-web-audio-worklet.js "$DIST"/
+cp -f web/shell/index.html web/shell/main.js web/shell/tiny-unzip.js web/shell/ymir-web-audio-worklet.js "$DIST"/
 
 PORT="${1:-8080}"
 echo "Serving $DIST at http://localhost:${PORT}"

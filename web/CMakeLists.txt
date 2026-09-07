@@ -37,7 +37,7 @@ target_link_options(ymir-web PRIVATE
     --bind                                  # Embind
     -fexceptions
     -sALLOW_MEMORY_GROWTH=1                 # disc images are large; grow as needed
-    -sINITIAL_MEMORY=67108864               # 64 MiB initial
+    -sINITIAL_MEMORY=268435456               # 256 MiB initial (real discs + MEMFS/preload headroom)
     -sMAXIMUM_MEMORY=4294967296             # 4 GiB ceiling (wasm32 limit)
     -sMODULARIZE=1
     -sEXPORT_NAME=createYmirModule
@@ -45,4 +45,5 @@ target_link_options(ymir-web PRIVATE
     -sENVIRONMENT=web,worker,node           # node kept for headless smoke tests
     -sFILESYSTEM=1
     -sNO_EXIT_RUNTIME=1
+    -sSTACK_SIZE=8388608
 )

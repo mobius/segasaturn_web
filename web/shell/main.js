@@ -91,7 +91,14 @@
         if (!running) return;
         // If the audio backlog exceeds ~250 ms, skip emulation this frame to let it drain.
         if (Module.audioAvailable() < 11025) {
-            Module.runFrame();
+            const ok = Module.runFrame();
+            if (ok === false) {
+                running = false;
+                setButtons();
+                const detail = (Module.getLastRunError && Module.getLastRunError()) || "unknown";
+                setStatus(`模拟中断：${detail}`);
+                return;
+            }
         }
         // Video
         const w = Module.getFrameWidth(), h = Module.getFrameHeight();
@@ -151,30 +158,98 @@
         setButtons();
     }
 
-    const DISC_MAIN_EXTS = [".chd", ".cue", ".mds", ".ccd", ".iso"];
-    async function loadDiscFiles(files) {
-        Module.FS.mkdirTree("/roms");
-        let mainFile = null;
-        for (const f of files) {
-            const data = new Uint8Array(await f.arrayBuffer());
-            Module.FS.writeFile(`/roms/${f.name}`, data);
-            const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
-            if (DISC_MAIN_EXTS.includes(ext) && !mainFile) mainFile = f.name;
+    // Prefer descriptor formats over raw .iso when several are present.
+    const DISC_MAIN_PRIORITY = [".chd", ".cue", ".mds", ".ccd", ".iso"];
+    function pickMainDiscFile(names) {
+        let best = null, bestRank = 999;
+        for (const name of names) {
+            const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
+            const rank = DISC_MAIN_PRIORITY.indexOf(ext);
+            if (rank >= 0 && rank < bestRank) {
+                best = name;
+                bestRank = rank;
+            }
         }
+        return best;
+    }
+    async function writeRomsAndLoad(entries) {
+        Module.FS.mkdirTree("/roms");
+        // Flat MEMFS: browser File.name and tiny-unzip both supply basenames only.
+        // Cue FILE lines with subdirectories (e.g. "Track/game.bin") will not resolve.
+        const written = [];
+        for (const [name, data] of entries) {
+            const base = String(name).split(/[/\\]/).pop();
+            Module.FS.writeFile(`/roms/${base}`, data);
+            written.push(base);
+        }
+        const mainFile = pickMainDiscFile(written);
         if (!mainFile) {
             setStatus("未找到主镜像文件（.chd/.cue/.iso 等）");
             return;
         }
         setStatus(`正在解析 ${mainFile} …`);
-        // Let the status paint before the (blocking) parse
         await new Promise((r) => setTimeout(r, 30));
         if (!Module.loadDisc(`/roms/${mainFile}`)) {
-            setStatus(`光盘解析失败：${mainFile}（多文件镜像请把 .cue 与所有 .bin 一起选中）`);
+            const detail = (Module.getLastMediaError && Module.getLastMediaError()) || "";
+            setStatus(
+                `光盘解析失败：${mainFile}` +
+                    (detail ? ` — ${detail}` : "") +
+                    "（多文件镜像请把 .cue 与所有 .bin 一起选中且文件名与 cue 的 FILE 行一致，或改用 .chd / 扁平 zip）"
+            );
             return;
         }
         discReady = true;
-        setStatus("光盘已加载，可以启动");
+        const warn = (Module.getLastMediaError && Module.getLastMediaError()) || "";
+        const bootable = !(Module.isDiscBootable) || Module.isDiscBootable();
+        const title = (Module.getDiscTitle && Module.getDiscTitle().trim()) || "";
+        if (!bootable || warn) {
+            setStatus(
+                `光盘已插入但可能无法启动游戏` +
+                    (title ? `（${title}）` : "") +
+                    (warn ? `：${warn}` : "。") +
+                    " BIOS 语言/CD 菜单可用，但进游戏请用 Z=A 确认；镜像异常时请换 CHD 或核对 cue 扇区 MODE。"
+            );
+        } else {
+            setStatus(
+                `光盘已加载${title ? `：${title}` : ""}，可以启动。` +
+                    ` BIOS 里确认请按 Z（A 键），Enter 只是 Start。`
+            );
+        }
         setButtons();
+    }
+    async function loadDiscZip(file) {
+        setStatus(`正在解压 ${file.name} …`);
+        await new Promise((r) => setTimeout(r, 30));
+        if (typeof ymirUnzip !== "function") {
+            setStatus("解压模块未加载");
+            return;
+        }
+        let files;
+        try {
+            files = await ymirUnzip(new Uint8Array(await file.arrayBuffer()));
+        } catch (err) {
+            setStatus(`ZIP 解压失败：${err.message ?? err}`);
+            return;
+        }
+        const names = Object.keys(files);
+        setStatus(`已解压 ${names.length} 个文件，正在写入 …`);
+        await writeRomsAndLoad(names.map((n) => [n, files[n]]));
+    }
+    async function loadDiscFiles(files) {
+        if (files.length === 1 && /\.zip$/i.test(files[0].name)) {
+            await loadDiscZip(files[0]);
+            return;
+        }
+        // Mixed selection: if any .zip is present among multiple files, reject clearly.
+        if (files.some((f) => /\.zip$/i.test(f.name))) {
+            setStatus("请单独上传一个 .zip，或只选择未压缩的镜像文件（不要混选）");
+            return;
+        }
+        const entries = [];
+        for (const f of files) {
+            entries.push([f.name, new Uint8Array(await f.arrayBuffer())]);
+        }
+        await writeRomsAndLoad(entries);
     }
 
     $("biosFile").addEventListener("change", (e) => e.target.files[0] && loadBiosFile(e.target.files[0]));

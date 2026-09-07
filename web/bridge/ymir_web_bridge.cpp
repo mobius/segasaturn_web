@@ -45,6 +45,10 @@ struct WebEmuState {
 
 WebEmuState g_emu;
 
+// Last media/emulation diagnostic strings surfaced to JS status bar.
+std::string g_lastMediaError;
+std::string g_lastRunError;
+
 // ---------------------------------------------------------------------------
 // Emulator callbacks (C-style: function pointer + void* context)
 // ---------------------------------------------------------------------------
@@ -133,17 +137,67 @@ bool loadIPL(emscripten::val data) {
 
 // Loads a disc image already written to MEMFS by JS (e.g. /roms/game.cue or /roms/game.chd).
 bool loadDisc(std::string path) {
+    g_lastMediaError.clear();
     if (!g_emu.saturn) {
+        g_lastMediaError = "emulator not initialized";
         return false;
     }
     ymir::media::Disc disc;
-    auto cbMsg = [](ymir::media::MessageType, std::string) {};
+    // Capture Error / NotValid / InvalidFormat for the JS status bar; ignore Debug spam.
+    auto cbMsg = [](ymir::media::MessageType type, std::string message) {
+        using MT = ymir::media::MessageType;
+        if (type == MT::Debug) {
+            return;
+        }
+        if (!g_lastMediaError.empty()) {
+            g_lastMediaError.push_back(';');
+            g_lastMediaError.push_back(' ');
+        }
+        g_lastMediaError += message;
+        // InvalidFormat is expected while probing alternate loaders; keep printf for real errors.
+        if (type == MT::Error || type == MT::NotValid) {
+            printf("[ymir-web] LoadDisc: %s\n", message.c_str());
+        }
+    };
     if (!ymir::media::LoadDisc(path, disc, /*preloadToRAM=*/true, cbMsg)) {
+        if (g_lastMediaError.empty()) {
+            g_lastMediaError = "LoadDisc failed (no detail)";
+        }
         return false;
     }
+    // LoadDisc probes CHD/CUE/MDS/CCD/ISO; failed probes emit InvalidFormat noise — drop it on success.
+    g_lastMediaError.clear();
     g_emu.saturn->LoadDisc(std::move(disc));
+    // Saturn::LoadDisc already autodetects; keep explicit call for clarity / double-safe.
     g_emu.saturn->AutodetectRegion();
+    const auto &hdr = g_emu.saturn->GetCDInterface().GetDiscHeader();
+    if (!hdr.IsValid()) {
+        g_lastMediaError =
+            "Disc loaded but Saturn system header is missing/invalid (expected \"SEGA SEGASATURN\"). "
+            "BIOS may show CD Player but will not boot the game — check cue/bin track MODE/sector size "
+            "or use a CHD dump.";
+        printf("[ymir-web] %s\n", g_lastMediaError.c_str());
+        // Still return true: disc is inserted; UI can warn via getLastMediaError / isDiscBootable.
+    }
     return true;
+}
+
+std::string getLastMediaError() {
+    return g_lastMediaError;
+}
+
+bool isDiscBootable() {
+    if (!g_emu.saturn || !g_emu.saturn->GetCDInterface().HasDisc()) {
+        return false;
+    }
+    return g_emu.saturn->GetCDInterface().GetDiscHeader().IsValid();
+}
+
+std::string getDiscTitle() {
+    if (!g_emu.saturn || !g_emu.saturn->GetCDInterface().HasDisc()) {
+        return {};
+    }
+    return g_emu.saturn->GetCDInterface().GetDiscHeader().gameTitle;
 }
 
 void ejectDisc() {
@@ -158,10 +212,29 @@ void reset(bool hard) {
     }
 }
 
-void runFrame() {
-    if (g_emu.saturn) {
-        g_emu.saturn->RunFrame();
+// Returns false if an exception escaped the emulator (wasm status should stop the loop).
+bool runFrame() {
+    g_lastRunError.clear();
+    if (!g_emu.saturn) {
+        g_lastRunError = "emulator not initialized";
+        return false;
     }
+    try {
+        g_emu.saturn->RunFrame();
+        return true;
+    } catch (const std::exception &e) {
+        g_lastRunError = e.what();
+        printf("[ymir-web] runFrame exception: %s\n", e.what());
+        return false;
+    } catch (...) {
+        g_lastRunError = "unknown exception in runFrame";
+        printf("[ymir-web] runFrame exception: unknown\n");
+        return false;
+    }
+}
+
+std::string getLastRunError() {
+    return g_lastRunError;
 }
 
 // --- Video -----------------------------------------------------------------
@@ -238,9 +311,13 @@ EMSCRIPTEN_BINDINGS(ymir_web) {
     function("getVersion", &getVersion);
     function("loadIPL", &loadIPL);
     function("loadDisc", &loadDisc);
+    function("getLastMediaError", &getLastMediaError);
+    function("isDiscBootable", &isDiscBootable);
+    function("getDiscTitle", &getDiscTitle);
     function("ejectDisc", &ejectDisc);
     function("reset", &reset);
     function("runFrame", &runFrame);
+    function("getLastRunError", &getLastRunError);
     function("getFramebuffer", &getFramebuffer);
     function("getFrameWidth", &getFrameWidth);
     function("getFrameHeight", &getFrameHeight);

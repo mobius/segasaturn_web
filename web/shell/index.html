@@ -51,8 +51,8 @@
       <input type="file" id="biosFile" accept=".bin,.rom">
     </div>
     <div class="row">
-      <label>光盘镜像（.chd / .cue+.bin / .iso，可多选）</label>
-      <input type="file" id="discFiles" multiple accept=".chd,.cue,.bin,.iso,.mds,.mdf,.ccd,.img,.sub">
+      <label>光盘镜像（.chd / .cue+.bin / .iso / .zip，可多选）</label>
+      <input type="file" id="discFiles" multiple accept=".chd,.cue,.bin,.iso,.mds,.mdf,.ccd,.img,.sub,.zip,application/zip">
     </div>
     <div class="row">
       <button id="startBtn" disabled>启动</button>
@@ -65,13 +65,14 @@
   <canvas id="screen" width="704" height="480"></canvas>
 
   <div class="hint">
-    按键映射：方向键 = 十字键，<kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd> = A/B/C，
+    按键映射：方向键 = 十字键，<kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd> = A/B/C（BIOS「決定」用 <kbd>Z</kbd>=A，不是 Enter），
     <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> = X/Y/Z，<kbd>Q</kbd>/<kbd>W</kbd> = L/R，
-    <kbd>Enter</kbd> = Start。BIOS 与存档（备份 RAM）会自动保存在浏览器 IndexedDB 中。<br>
-    提示：推荐使用 .chd 镜像（占用内存最少）。BIOS 与游戏 ROM 受版权保护，请使用自己合法持有的文件。
+    <kbd>Enter</kbd> = Start（「Press Start Button」）。BIOS 与存档（备份 RAM）会自动保存在浏览器 IndexedDB 中。<br>
+    提示：推荐 .chd（内存占用最小）。.cue+.bin 多选时文件名必须与 cue 的 FILE 行一致（不要带子目录）；大镜像会 MEMFS+preload 双倍占内存。BIOS/ROM 受版权保护，请使用自己合法持有的文件。
   </div>
 
   <script src="ymir-web.js"></script>
+  <script src="tiny-unzip.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
