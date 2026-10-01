@@ -53,3 +53,5 @@ RUN rm -f /etc/nginx/conf.d/default.conf \
 COPY --from=build /dist/ /usr/share/nginx/html/
 
 EXPOSE ${PORT}
+
+CMD ["nginx", "-g", "daemon off;"]
