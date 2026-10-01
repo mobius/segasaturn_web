@@ -35,24 +35,21 @@ FROM nginx:alpine
 
 # Railway injects PORT; nginx renders this template with envsubst on startup.
 ENV PORT=8080
-RUN rm -f /etc/nginx/conf.d/default.conf
-COPY <<'EOF' /etc/nginx/templates/default.conf.template
-server {
-    listen ${PORT};
-    listen [::]:${PORT};
-    root /usr/share/nginx/html;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location ~* \.wasm$ {
-        default_type application/wasm;
-    }
-}
-EOF
+RUN rm -f /etc/nginx/conf.d/default.conf \
+    && mkdir -p /etc/nginx/templates \
+    && echo 'server {' > /etc/nginx/templates/default.conf.template \
+    && echo '    listen ${PORT};' >> /etc/nginx/templates/default.conf.template \
+    && echo '    listen [::]:${PORT};' >> /etc/nginx/templates/default.conf.template \
+    && echo '    root /usr/share/nginx/html;' >> /etc/nginx/templates/default.conf.template \
+    && echo '    index index.html;' >> /etc/nginx/templates/default.conf.template \
+    && echo '    location / {' >> /etc/nginx/templates/default.conf.template \
+    && echo '        try_files $uri $uri/ /index.html;' >> /etc/nginx/templates/default.conf.template \
+    && echo '    }' >> /etc/nginx/templates/default.conf.template \
+    && echo '    location ~* \.wasm$ {' >> /etc/nginx/templates/default.conf.template \
+    && echo '        default_type application/wasm;' >> /etc/nginx/templates/default.conf.template \
+    && echo '    }' >> /etc/nginx/templates/default.conf.template \
+    && echo '}' >> /etc/nginx/templates/default.conf.template
 
 COPY --from=build /dist/ /usr/share/nginx/html/
 
-EXPOSE 8080
+EXPOSE ${PORT}
